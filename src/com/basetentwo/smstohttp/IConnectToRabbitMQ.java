@@ -111,12 +111,7 @@ public class IConnectToRabbitMQ {
    */
   public void AddBinding(String routingKey)
   {
-      try {
-          mModel.queueBind(mQueue, mExchange, routingKey);
-      } catch (IOException e) {
-          // TODO Auto-generated catch block
-          e.printStackTrace();
-      }
+
   }
 
   /**
@@ -176,7 +171,8 @@ final class ConnectTask extends AsyncTask<IConnectToRabbitMQ, Integer, Boolean> 
 	IConnectToRabbitMQ rabbit = null;
     protected Boolean doInBackground(IConnectToRabbitMQ ... rabbits) {
     	this.rabbit = rabbits[0];
-    	return connectToRabbitMQ();
+    	boolean status = connectToRabbitMQ();
+    	return status;
     }
     
     /**
@@ -200,8 +196,11 @@ final class ConnectTask extends AsyncTask<IConnectToRabbitMQ, Integer, Boolean> 
             rabbit.mModel = rabbit.mConnection.createChannel();
             rabbit.mModel.exchangeDeclare(rabbit.mExchange, rabbit.MyExchangeType, false);
             
+            
             try {
             	rabbit.mQueue = rabbit.mModel.queueDeclare().getQueue();
+                rabbit.mModel.queueBind(rabbit.mQueue, rabbit.mExchange, "sms_send");
+                
             	rabbit.MySubscription = new QueueingConsumer(rabbit.mModel);
             	rabbit.mModel.basicConsume(rabbit.mQueue, false, rabbit.MySubscription);
              } catch (IOException e) {

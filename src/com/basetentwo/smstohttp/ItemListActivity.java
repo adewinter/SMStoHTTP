@@ -2,10 +2,20 @@ package com.basetentwo.smstohttp;
 
 import java.io.UnsupportedEncodingException;
 
+import org.json.JSONException;
+import org.json.JSONObject;
+
+import com.parse.Parse;
+import com.parse.ParseInstallation;
+import com.parse.PushService;
+
+import android.app.Activity;
+import android.content.Context;
 import android.content.Intent;
 import android.os.Bundle;
 import android.os.StrictMode;
 import android.support.v4.app.FragmentActivity;
+import android.telephony.SmsManager;
 import android.util.Log;
 import android.widget.TextView;
 
@@ -26,51 +36,38 @@ import android.widget.TextView;
  * {@link ItemListFragment.Callbacks} interface
  * to listen for item selections.
  */
-public class ItemListActivity extends FragmentActivity
-        implements ItemListFragment.Callbacks {
+public class ItemListActivity extends Activity {
 
-    /**
-     * Whether or not the activity is in two-pane mode, i.e. running on a tablet
-     * device.
-     */
-    private boolean mTwoPane;
     private static final String TAG="SMStoHTTP";
     
     private IConnectToRabbitMQ mConsumer;
     private TextView mOutput;
     
+    
+    
     @Override
     protected void onCreate(Bundle savedInstanceState) {
     	Log.d(TAG,"In Oncreate of main activity!");
         super.onCreate(savedInstanceState);
+        
+        Parse.initialize(this, "h6xOsjUapysYL613ph7Obx9cH3Kp81IXvNIN9FMK", "SeAOm2gyeHWonpsMuMlbX6urvkXrQZLZPYDooLlX");
+        PushService.setDefaultPushCallback(this, ItemListActivity.class);
+        PushService.subscribe(this, "send_sms", ItemListActivity.class);
+        ParseInstallation.getCurrentInstallation().saveInBackground();
         if (android.os.Build.VERSION.SDK_INT > 9) {
             StrictMode.ThreadPolicy policy = new StrictMode.ThreadPolicy.Builder().permitAll().build();
             StrictMode.setThreadPolicy(policy);
           }
-        setContentView(R.layout.activity_item_list);
+        setContentView(R.layout.main);
 
-        if (findViewById(R.id.item_detail_container) != null) {
-            // The detail container view will be present only in the
-            // large-screen layouts (res/values-large and
-            // res/values-sw600dp). If this view is present, then the
-            // activity should be in two-pane mode.
-            mTwoPane = true;
 
-            // In two-pane mode, list items should be given the
-            // 'activated' state when touched.
-            ((ItemListFragment) getSupportFragmentManager()
-                    .findFragmentById(R.id.item_list))
-                    .setActivateOnItemClick(true);
-        }
-
-        // TODO: If exposing deep links into your app, handle intents here.
         //The output TextView we'll use to display messages
         mOutput =  (TextView) findViewById(R.id.output);
  
         //Create the consumer
         mConsumer = new IConnectToRabbitMQ("base102.net",
                 "aamnotifs",
-                "fanout",
+                "direct",
                 "adewinter",
                 "qsczse12",
                 5672);
@@ -80,6 +77,12 @@ public class ItemListActivity extends FragmentActivity
  
         //register for messages
         mConsumer.setOnReceiveMessageHandler(new IConnectToRabbitMQ.OnReceiveMessageHandler() {
+        	
+        	private void sendSMS(String phoneNumber, String message)
+        	{
+        		SmsManager sms = SmsManager.getDefault();
+        		sms.sendTextMessage(phoneNumber, null, message, null, null);
+        	}
 			
         	 public void onReceiveMessage(byte[] message) {
                  String text = "";
@@ -88,8 +91,21 @@ public class ItemListActivity extends FragmentActivity
                  } catch (UnsupportedEncodingException e) {
                      e.printStackTrace();
                  }
-  
                  mOutput.append("\n"+text);
+                 
+                 try {
+                	 JSONObject json = new JSONObject(text);
+                	 String myMessage = json.getString("message");
+                	 String myNumber = json.getString("title");
+                	 mOutput.append("\n"+myMessage + ": " + myNumber);
+                	 
+                	 sendSMS(myNumber, myMessage);
+                 } catch (JSONException jse) {
+                	 jse.printStackTrace();
+                 }
+                 
+                 
+                 
              }
   
 		});
@@ -106,31 +122,5 @@ public class ItemListActivity extends FragmentActivity
     protected void onPause() {
         super.onPause();
         mConsumer.dispose();
-    }
-    /**
-     * Callback method from {@link ItemListFragment.Callbacks}
-     * indicating that the item with the given ID was selected.
-     */
-    @Override
-    public void onItemSelected(String id) {
-        if (mTwoPane) {
-            // In two-pane mode, show the detail view in this activity by
-            // adding or replacing the detail fragment using a
-            // fragment transaction.
-            Bundle arguments = new Bundle();
-            arguments.putString(ItemDetailFragment.ARG_ITEM_ID, id);
-            ItemDetailFragment fragment = new ItemDetailFragment();
-            fragment.setArguments(arguments);
-            getSupportFragmentManager().beginTransaction()
-                    .replace(R.id.item_detail_container, fragment)
-                    .commit();
-
-        } else {
-            // In single-pane mode, simply start the detail activity
-            // for the selected item ID.
-            Intent detailIntent = new Intent(this, ItemDetailActivity.class);
-            detailIntent.putExtra(ItemDetailFragment.ARG_ITEM_ID, id);
-            startActivity(detailIntent);
-        }
     }
 }
